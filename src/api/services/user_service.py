@@ -11,10 +11,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from database import get_database
-from models.token_model import TokenResponse
-from models.user_model import UserEntity, UserResponse
-from repositories.user_repository import get_credentials_by_username
+from api.database import get_database
+from api.models.token_model import TokenResponse
+from api.models.user_model import UserEntity, UserResponse
+from api.repositories.user_repository import get_credentials_by_username
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")

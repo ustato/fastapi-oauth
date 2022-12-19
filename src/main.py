@@ -4,9 +4,9 @@
 from fastapi import Depends, FastAPI
 from fastapi.security import OAuth2PasswordRequestForm
 
-from models.token_model import TokenResponse
-from models.user_model import UserResponse
-from services.user_service import get_current_active_user, login_for_access_token
+from api.models.token_model import TokenResponse
+from api.models.user_model import UserResponse
+from api.services.user_service import get_current_active_user, login_for_access_token
 
 app = FastAPI()
 

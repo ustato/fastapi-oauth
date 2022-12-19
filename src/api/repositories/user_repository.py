@@ -5,7 +5,7 @@ from typing import Union
 
 from sqlalchemy.orm import Session
 
-from models.user_model import UserEntity
+from api.models.user_model import UserEntity
 
 
 def get_credentials_by_username(
