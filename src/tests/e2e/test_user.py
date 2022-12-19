@@ -9,7 +9,10 @@ from sqlalchemy_utils import create_database, drop_database
 from api.database import get_database
 from api.models.base_model import Base
 from api.models.user_model import UserEntity
-from api.services.user_service import decode_access_token
+from api.services.user_service import (
+    decode_access_token,
+    get_callable_create_access_token,
+)
 from main import app
 from tests.database import engine, get_test_database
 
@@ -24,7 +27,7 @@ def db_fixture() -> Session:
         username="johndoe",
         full_name="John Doe",
         email="johndoe@example.com",
-        hashed_password="fakehashedsecret1",
+        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
         disabled=False,
     )
 
@@ -45,8 +48,54 @@ def client(db_fixture) -> TestClient:
         return db_fixture
 
     app.dependency_overrides[get_database] = _get_database_override
+    app.dependency_overrides[decode_access_token] = decode_access_token
+    app.dependency_overrides[
+        get_callable_create_access_token
+    ] = get_callable_create_access_token
 
     return TestClient(app)
+
+
+def test_generate_token_NR001(client):
+    """アクセストークン取得API 正常系テスト."""
+
+    def _get_callable_create_access_token():
+        def create_access_token(data, expires_delta):
+            return "dummy_token"
+
+        return create_access_token
+
+    app.dependency_overrides[
+        get_callable_create_access_token
+    ] = _get_callable_create_access_token
+
+    response = client.post("/token", data={"username": "johndoe", "password": "secret"})
+    assert response.status_code == 200
+    assert response.json() == {"access_token": "dummy_token", "token_type": "bearer"}
+
+
+def test_generate_token_AB001(client):
+    """
+    アクセストークン取得API 異常系テスト.
+
+    パスワード不正.
+    """
+    response = client.post(
+        "/token", data={"username": "johndoe", "password": "secreto"}
+    )
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect username or password"}
+
+
+def test_generate_token_AB002(client):
+    """
+    アクセストークン取得API 異常系テスト.
+
+    ユーザ名不正.
+    """
+    response = client.post("/token", data={"username": "jo", "password": "secret"})
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect username or password"}
 
 
 def test_get_users_me_NR001(client):
@@ -72,8 +121,6 @@ def test_get_users_me_ABR001(client):
 
     トークン認識不能.
     """
-    app.dependency_overrides[decode_access_token] = decode_access_token
-
     response = client.get("/users/me", headers={"Authorization": "Beare"})
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}
@@ -85,8 +132,6 @@ def test_get_users_me_ABR002(client):
 
     トークン不正.
     """
-    app.dependency_overrides[decode_access_token] = decode_access_token
-
     response = client.get("/users/me", headers={"Authorization": "Bearer"})
     assert response.status_code == 401
     assert response.json() == {"detail": "Could not validate credentials"}
@@ -127,7 +172,7 @@ def test_get_users_me_ABR004(client):
             username="alice",
             full_name="Alice Wonderson",
             email="alice@example.com",
-            hashed_password="fakehashedsecret2",
+            hashed_password="fakehashedsecret",
             disabled=True,
         )
     )

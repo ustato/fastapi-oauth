@@ -3,7 +3,7 @@
 
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Union
+from typing import Callable, Dict, Union
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -104,9 +104,15 @@ def get_current_active_user(
     )
 
 
+def get_callable_create_access_token() -> Callable:
+    """DIのためにアクセストークン作成関数を切り出し."""
+    return create_access_token
+
+
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db_session: Session = Depends(get_database),
+    token_creater: Callable = Depends(get_callable_create_access_token),
 ) -> TokenResponse:
     """認可とアクセストークン発行を行う関数."""
     user = authenticate_user(db_session, form_data.username, form_data.password)
@@ -117,7 +123,7 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
+    access_token = token_creater(
         data={"sub": form_data.username}, expires_delta=access_token_expires
     )
 
