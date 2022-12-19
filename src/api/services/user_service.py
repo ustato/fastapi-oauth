@@ -3,7 +3,7 @@
 
 import os
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Dict, Union
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -55,9 +55,8 @@ def create_access_token(
     return encoded_jwt
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> UserEntity:
-    """アクセス中のユーザ情報を取得する関数."""
-    db_session = next(get_database())
+def decode_access_token(token: str = Depends(oauth2_scheme)):
+    """トークンをデコードしpayloadを取得する関数."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -70,9 +69,23 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserEntity:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
+
+    return payload
+
+
+def get_current_user(
+    token_payload: Dict[str, str] = Depends(decode_access_token),
+    db_session: Session = Depends(get_database),
+) -> UserEntity:
+    """アクセス中のユーザ情報を取得する関数."""
+    token_username = token_payload.get("sub")
     user = get_credentials_by_username(db_session, token_username)
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not find user",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return user
 
@@ -91,9 +104,11 @@ def get_current_active_user(
     )
 
 
-def login_for_access_token(form_data: OAuth2PasswordRequestForm) -> TokenResponse:
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db_session: Session = Depends(get_database),
+) -> TokenResponse:
     """認可とアクセストークン発行を行う関数."""
-    db_session = next(get_database())
     user = authenticate_user(db_session, form_data.username, form_data.password)
     if not user:
         raise HTTPException(

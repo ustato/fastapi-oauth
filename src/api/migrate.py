@@ -18,6 +18,5 @@ inital_user = UserEntity(
 
 
 session = next(get_database())
-print(dir(session))
 session.add(inital_user)
 session.commit()
