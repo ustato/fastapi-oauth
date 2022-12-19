@@ -1,6 +1,7 @@
 """ビジネスロジック向けユーザサービス."""
 
 
+import os
 from datetime import datetime, timedelta
 from typing import Union
 
@@ -8,17 +9,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
 from database import get_database
-from models.user_model import UserEntity
-
-# , UserResponse
-# from models.token import TokenResponse
+from models.token_model import TokenResponse
+from models.user_model import UserEntity, UserResponse
 from repositories.user_repository import get_credentials_by_username
 
-# openssl rand -hex 32
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
-ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -30,9 +29,8 @@ def verify_password(plain_password: str, hashed_password: str):
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def authenticate_user(username: str, password: str) -> bool:
+def authenticate_user(db_session: Session, username: str, password: str) -> bool:
     """ユーザを認可できるかの検証関数."""
-    db_session = (get_database(),)
     user = get_credentials_by_username(db_session, username)
     if not user:
         return False
@@ -59,7 +57,7 @@ def create_access_token(
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> UserEntity:
     """アクセス中のユーザ情報を取得する関数."""
-    db_session = (get_database(),)
+    db_session = next(get_database())
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -81,17 +79,22 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserEntity:
 
 def get_current_active_user(
     current_user: UserEntity = Depends(get_current_user),
-) -> str:
+) -> UserResponse:
     """アクティブ状態のユーザ情報を取得する関数."""
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    return current_user.email
+    return UserResponse(
+        username=current_user.username,
+        email=current_user.email,
+        full_name=current_user.full_name,
+    )
 
 
-def login_for_access_token(form_data: OAuth2PasswordRequestForm):
+def login_for_access_token(form_data: OAuth2PasswordRequestForm) -> TokenResponse:
     """認可とアクセストークン発行を行う関数."""
-    user = authenticate_user(form_data.username, form_data.password)
+    db_session = next(get_database())
+    user = authenticate_user(db_session, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -103,4 +106,7 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm):
         data={"sub": form_data.username}, expires_delta=access_token_expires
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+    )
