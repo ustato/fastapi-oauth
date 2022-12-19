@@ -1,0 +1,11 @@
+services:
+  app:
+    container_name: FastAPI
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    volumes:
+      - ./src:/app
+    ports:
+      - "8080:80"
