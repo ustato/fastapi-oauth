@@ -6,4 +6,4 @@ RUN pip install --no-cache-dir sqlalchemy python-jose[cryptography] passlib[bcry
 
 FROM base as development
 
-ENV PYTHONPATH /app/src
+ENV PYTHONPATH /app
