@@ -3,7 +3,7 @@
 
 import os
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Callable, Dict, Union
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -11,10 +11,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from database import get_database
-from models.token_model import TokenResponse
-from models.user_model import UserEntity, UserResponse
-from repositories.user_repository import get_credentials_by_username
+from api.database import get_database
+from api.models.token_model import TokenResponse
+from api.models.user_model import UserEntity, UserResponse
+from api.repositories.user_repository import get_credentials_by_username
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
@@ -55,9 +55,8 @@ def create_access_token(
     return encoded_jwt
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> UserEntity:
-    """アクセス中のユーザ情報を取得する関数."""
-    db_session = next(get_database())
+def decode_access_token(token: str = Depends(oauth2_scheme)):
+    """トークンをデコードしpayloadを取得する関数."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -70,9 +69,23 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserEntity:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
+
+    return payload
+
+
+def get_current_user(
+    token_payload: Dict[str, str] = Depends(decode_access_token),
+    db_session: Session = Depends(get_database),
+) -> UserEntity:
+    """アクセス中のユーザ情報を取得する関数."""
+    token_username = token_payload.get("sub")
     user = get_credentials_by_username(db_session, token_username)
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not find user",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return user
 
@@ -91,9 +104,17 @@ def get_current_active_user(
     )
 
 
-def login_for_access_token(form_data: OAuth2PasswordRequestForm) -> TokenResponse:
+def get_callable_create_access_token() -> Callable:
+    """DIのためにアクセストークン作成関数を切り出し."""
+    return create_access_token
+
+
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db_session: Session = Depends(get_database),
+    token_creater: Callable = Depends(get_callable_create_access_token),
+) -> TokenResponse:
     """認可とアクセストークン発行を行う関数."""
-    db_session = next(get_database())
     user = authenticate_user(db_session, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -102,7 +123,7 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm) -> TokenRespons
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
+    access_token = token_creater(
         data={"sub": form_data.username}, expires_delta=access_token_expires
     )
 

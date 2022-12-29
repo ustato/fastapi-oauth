@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.schema import Column
 from sqlalchemy.types import Boolean, String
 
-from models.base_model import Base
+from api.models.base_model import Base
 
 
 class UserEntity(Base):

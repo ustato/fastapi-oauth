@@ -4,6 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+sqlalchemy = "==1.4.45"
+fastapi = "==0.88.0"
+httpx = "==0.23.1"
+ecdsa = "==0.18.0"
+sqlalchemy-utils = "*"
+pytest-asyncio = "*"
+aiosqlite = "*"
+bcrypt = "==4.0.1"
 
 [dev-packages]
 flake8 = "*"
